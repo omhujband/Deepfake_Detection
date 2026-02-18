@@ -1,3 +1,7 @@
+"""
+Predictor with support for external pre-trained models
+"""
+
 import torch
 import numpy as np
 import os
@@ -9,7 +13,7 @@ from utils.video_processor import VideoProcessor
 class DeepfakePredictor:
     """Main prediction class for deepfake detection"""
     
-    def __init__(self, model_path=None, device='cuda', image_size=224):
+    def __init__(self, model_path=None, device='cuda', image_size=224, architecture='efficientnet_b0'):
         # Set device
         if device == 'cuda' and torch.cuda.is_available():
             self.device = torch.device('cuda')
@@ -17,21 +21,25 @@ class DeepfakePredictor:
             self.device = torch.device('cpu')
             
         self.image_size = image_size
+        self.architecture = architecture
         
         # Initialize model
-        self.model = DeepfakeDetectorCNN(num_classes=2, pretrained=True)
-        
-        # Load weights if available
+        self.model = None
         self.model_loaded = False
-        if model_path and os.path.exists(model_path):
-            self.load_model(model_path)
-            self.model_loaded = True
-        else:
-            print("=" * 50)
-            print("WARNING: No trained model weights found!")
-            print("The model will use random weights.")
-            print("Please train the model first for accurate predictions.")
-            print("=" * 50)
+        
+        # Try to load model
+        if model_path:
+            self.model_loaded = self._try_load_model(model_path)
+        
+        # If no model loaded, create untrained model
+        if not self.model_loaded:
+            print("Creating new untrained model...")
+            self.model = DeepfakeDetectorCNN(
+                num_classes=2, 
+                pretrained=True,
+                backbone=architecture
+            )
+            print("WARNING: Model is untrained. Results will be random.")
         
         self.model.to(self.device)
         self.model.eval()
@@ -40,33 +48,67 @@ class DeepfakePredictor:
         self.image_processor = ImageProcessor(image_size, str(self.device))
         self.video_processor = VideoProcessor(image_size, str(self.device))
     
-    def load_model(self, model_path):
-        """Load model weights"""
+    def _try_load_model(self, model_path):
+        """Attempt to load model from path"""
+        
+        if not os.path.exists(model_path):
+            print(f"Model file not found: {model_path}")
+            return False
+        
         try:
+            print(f"Loading model from: {model_path}")
             checkpoint = torch.load(model_path, map_location=self.device)
             
+            # Determine what type of checkpoint this is
             if isinstance(checkpoint, dict):
+                # Check if it's our format
                 if 'model_state_dict' in checkpoint:
-                    self.model.load_state_dict(checkpoint['model_state_dict'])
+                    state_dict = checkpoint['model_state_dict']
                 elif 'state_dict' in checkpoint:
-                    self.model.load_state_dict(checkpoint['state_dict'])
+                    state_dict = checkpoint['state_dict']
                 else:
-                    self.model.load_state_dict(checkpoint)
+                    state_dict = checkpoint
             else:
-                self.model.load_state_dict(checkpoint)
+                state_dict = checkpoint
             
-            print(f"Model loaded successfully from {model_path}")
+            # Detect architecture from weights
+            architecture = self._detect_architecture(state_dict)
+            print(f"Detected architecture: {architecture}")
+            
+            # Build model with detected architecture
+            self.model = DeepfakeDetectorCNN(
+                num_classes=2,
+                pretrained=False,
+                backbone=architecture
+            )
+            
+            # Load weights
+            self.model.load_state_dict(state_dict, strict=False)
+            print("Model loaded successfully!")
+            return True
             
         except Exception as e:
             print(f"Error loading model: {e}")
-            raise
+            print("Will create untrained model instead.")
+            return False
+    
+    def _detect_architecture(self, state_dict):
+        """Detect architecture from state dict keys"""
+        keys_str = str(list(state_dict.keys()))
+        
+        if 'backbone.features' in keys_str or 'efficientnet' in keys_str.lower():
+            return 'efficientnet_b0'
+        elif 'layer4' in keys_str:
+            return 'resnet50'
+        elif 'Mixed' in keys_str:
+            return 'xception'
+        
+        return 'efficientnet_b0'
     
     def predict_image(self, image_path):
         """Predict if an image is deepfake"""
-        # Preprocess
         tensor, face_found = self.image_processor.preprocess(image_path)
         
-        # Predict
         self.model.eval()
         with torch.no_grad():
             outputs = self.model(tensor)
@@ -89,7 +131,6 @@ class DeepfakePredictor:
     
     def predict_video(self, video_path):
         """Predict if a video is deepfake"""
-        # Process video
         batch, metadata = self.video_processor.process_video(video_path)
         
         if batch is None:
@@ -100,24 +141,18 @@ class DeepfakePredictor:
                 'metadata': metadata
             }
         
-        # Predict on all frames
         self.model.eval()
         with torch.no_grad():
             outputs = self.model(batch)
             probabilities = torch.softmax(outputs, dim=1)
             
-            # Get per-frame predictions
             frame_predictions = probabilities[:, 1].cpu().numpy()
-            
-            # Aggregate predictions
             avg_fake_prob = float(np.mean(frame_predictions))
             
-            # Voting
             fake_votes = np.sum(frame_predictions > 0.5)
             total_frames = len(frame_predictions)
             voting_ratio = fake_votes / total_frames
             
-            # Final prediction
             prediction = 'Fake' if avg_fake_prob > 0.5 else 'Real'
             confidence = max(avg_fake_prob, 1 - avg_fake_prob)
         
@@ -147,5 +182,6 @@ class DeepfakePredictor:
             'input_size': self.image_size,
             'gpu_available': torch.cuda.is_available(),
             'gpu_name': torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
-            'model_loaded': self.model_loaded
+            'model_loaded': self.model_loaded,
+            'architecture': self.architecture
         }
