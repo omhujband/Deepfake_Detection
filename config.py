@@ -10,7 +10,7 @@ class Config:
     ALLOWED_VIDEO_EXTENSIONS = {'mp4', 'avi', 'mov', 'mkv'}
     
     # Model settings
-    MODEL_PATH = 'model/weights/deepfake_detector.pth'
+    MODEL_PATH = 'deepfake_detector_v1.keras' 
     DEVICE = 'cuda'  # Use 'cuda' for RTX GPU, 'cpu' for CPU
     IMAGE_SIZE = 224
     CONFIDENCE_THRESHOLD = 0.5
