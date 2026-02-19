@@ -43,7 +43,6 @@ def index():
     model_info = predictor.get_model_info()
     return render_template('index.html', model_info=model_info)
 
-
 @app.route('/analyze', methods=['POST'])
 def analyze():
     """Analyze uploaded file for deepfakes"""
@@ -77,8 +76,16 @@ def analyze():
         # Analyze
         start_time = time.time()
         
+        # Check if enhanced analysis is requested
+        use_enhanced = request.form.get('enhanced', 'true').lower() == 'true'
+        
         if file_type == 'image':
-            result = predictor.predict_image(filepath)
+            if use_enhanced and hasattr(predictor.predictor, 'predict_image_enhanced'):
+                # Use enhanced multi-method analysis
+                result = predictor.predictor.predict_image_enhanced(filepath)
+            else:
+                # Use basic model only
+                result = predictor.predict_image(filepath)
         else:
             result = predictor.predict_video(filepath)
         
@@ -89,6 +96,7 @@ def analyze():
         result['file_type'] = file_type
         result['processing_time'] = processing_time
         result['file_url'] = url_for('static', filename=f'uploads/{filename}')
+        result['enhanced_mode'] = use_enhanced and file_type == 'image'
         
         return jsonify(result)
     
@@ -101,7 +109,6 @@ def analyze():
         if os.path.exists(filepath):
             os.remove(filepath)
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/api/model-info')
 def model_info():

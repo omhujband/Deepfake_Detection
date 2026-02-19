@@ -12,4 +12,6 @@
 4. To activate environemnt, run command: venv\Scripts\activate
 
 5. Finally run python app.py to host the project on localhost:5000
+
+6. To end the python environment, run command: deactivate
 ```

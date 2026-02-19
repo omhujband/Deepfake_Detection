@@ -196,6 +196,56 @@ document.addEventListener('DOMContentLoaded', function() {
             frameChartContainer.classList.add('d-none');
         }
 
+        // Show detailed analysis breakdown if available
+        if (result.analysis_breakdown) {
+            let breakdownHTML = '<div class="mt-4">';
+            breakdownHTML += '<h6><i class="fas fa-chart-line"></i> Detailed Analysis</h6>';
+            
+            // CNN Model result
+            breakdownHTML += '<div class="card mb-2">';
+            breakdownHTML += '<div class="card-body p-3">';
+            breakdownHTML += `<strong>CNN Model (${result.analysis_breakdown.cnn_model.weight}% weight)</strong><br>`;
+            breakdownHTML += `Fake: ${result.analysis_breakdown.cnn_model.fake_prob}% | `;
+            breakdownHTML += `Real: ${result.analysis_breakdown.cnn_model.real_prob}%`;
+            breakdownHTML += '</div></div>';
+            
+            // Ensemble methods
+            const ensemble = result.analysis_breakdown.ensemble_methods;
+            breakdownHTML += '<div class="card mb-2">';
+            breakdownHTML += '<div class="card-body p-3">';
+            breakdownHTML += `<strong>Advanced Analysis (${ensemble.weight}% weight)</strong><br>`;
+            breakdownHTML += `Fake: ${ensemble.fake_prob}% | Real: ${ensemble.real_prob}%<br>`;
+            breakdownHTML += `<small>Votes: ${ensemble.votes_fake} fake, ${ensemble.votes_real} real</small>`;
+            breakdownHTML += '</div></div>';
+            
+            // Individual methods
+            breakdownHTML += '<div class="accordion" id="methodsAccordion">';
+            ensemble.methods.forEach((method, index) => {
+                const badgeClass = method.fake_probability > 50 ? 'bg-danger' : 'bg-success';
+                breakdownHTML += `
+                    <div class="accordion-item">
+                        <h2 class="accordion-header">
+                            <button class="accordion-button collapsed" type="button" 
+                                    data-bs-toggle="collapse" data-bs-target="#method${index}">
+                                ${method.name} 
+                                <span class="badge ${badgeClass} ms-2">${method.fake_probability}% fake</span>
+                            </button>
+                        </h2>
+                        <div id="method${index}" class="accordion-collapse collapse" data-bs-parent="#methodsAccordion">
+                            <div class="accordion-body">
+                                <strong>Confidence:</strong> ${method.confidence}%<br>
+                                <strong>Details:</strong> ${method.details}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            breakdownHTML += '</div>';
+            breakdownHTML += '</div>';
+            
+            detailsList.innerHTML += breakdownHTML;
+        }
+
         detailsList.innerHTML = detailsHTML;
         resultsCard.scrollIntoView({ behavior: 'smooth' });
     }

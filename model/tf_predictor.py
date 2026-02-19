@@ -415,3 +415,87 @@ class TensorFlowPredictor:
             })
         
         return info
+
+    def predict_image_enhanced(self, image_path):
+        """
+        Enhanced prediction using ensemble of methods
+        
+        Args:
+            image_path: Path to image file
+            
+        Returns:
+            Dictionary with comprehensive analysis
+        """
+        if not self.model_loaded:
+            return {
+                'error': 'Model not loaded',
+                'prediction': 'Unknown',
+                'confidence': 0,
+                'model_loaded': False
+            }
+        
+        try:
+            # Import advanced detectors
+            from utils.advanced_detectors import EnsembleDetector
+            
+            # 1. Original model prediction
+            basic_result = self.predict_image(image_path)
+            
+            # 2. Advanced ensemble analysis
+            ensemble = EnsembleDetector()
+            ensemble_result = ensemble.analyze(image_path)
+            
+            # 3. Combine predictions
+            # Weight: 60% trained model, 40% ensemble methods
+            model_weight = 0.6
+            ensemble_weight = 0.4
+            
+            model_fake_prob = basic_result['fake_probability']
+            ensemble_fake_prob = ensemble_result['ensemble_fake_prob']
+            
+            combined_fake_prob = (model_fake_prob * model_weight) + (ensemble_fake_prob * ensemble_weight)
+            combined_real_prob = 100 - combined_fake_prob
+            
+            # Final prediction
+            if combined_fake_prob > 50:
+                final_prediction = 'Fake'
+                final_confidence = combined_fake_prob
+            else:
+                final_prediction = 'Real'
+                final_confidence = combined_real_prob
+            
+            return {
+                'prediction': final_prediction,
+                'confidence': round(final_confidence, 2),
+                'fake_probability': round(combined_fake_prob, 2),
+                'real_probability': round(combined_real_prob, 2),
+                'face_detected': basic_result.get('face_detected', False),
+                'model_loaded': True,
+                
+                # Detailed breakdown
+                'analysis_breakdown': {
+                    'cnn_model': {
+                        'prediction': basic_result['prediction'],
+                        'fake_prob': basic_result['fake_probability'],
+                        'real_prob': basic_result['real_probability'],
+                        'weight': model_weight * 100
+                    },
+                    'ensemble_methods': {
+                        'fake_prob': ensemble_fake_prob,
+                        'real_prob': round(100 - ensemble_fake_prob, 2),
+                        'confidence': ensemble_result['ensemble_confidence'],
+                        'weight': ensemble_weight * 100,
+                        'votes_fake': ensemble_result['votes_fake'],
+                        'votes_real': ensemble_result['votes_real'],
+                        'methods': ensemble_result['methods']
+                    }
+                }
+            }
+            
+        except Exception as e:
+            print(f"Enhanced prediction error: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Fallback to basic prediction
+            return self.predict_image(image_path)
