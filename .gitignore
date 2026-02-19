@@ -4,3 +4,4 @@ utils/__pycache__
 models/__pycache__
 check_gpu.py
 .vscode
+static/uploads
